@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6fa">
+  <meta name="description" content="Explore the AI usage survey with a private, local data assistant.">
+  <title>AI Usage Data Agent</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="layout">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="AI Usage Data Agent home">
+        <span class="brand-mark">A</span>
+        <span class="brand-name">Data Agent<small>AI usage research</small></span>
+      </a>
+      <div class="sidebar-section dataset-section">
+        <p class="eyebrow">YOUR DATASET</p>
+        <div class="dataset-card">
+          <span class="file-icon" aria-hidden="true">▤</span>
+          <div class="dataset-copy"><strong>AI Usage &amp; Impact</strong><small id="dataset-status">Loading dataset…</small></div>
+        </div>
+      </div>
+      <div class="sidebar-section prompt-section">
+        <p class="eyebrow">START EXPLORING</p>
+        <div class="suggestions">
+          <button type="button" class="suggestion"><span class="suggestion-icon">↗</span><span>Average productivity score</span></button>
+          <button type="button" class="suggestion"><span class="suggestion-icon">◫</span><span>Compare time saved by user type</span></button>
+          <button type="button" class="suggestion"><span class="suggestion-icon">✳</span><span>Most popular AI tools</span></button>
+          <button type="button" class="suggestion"><span class="suggestion-icon">◎</span><span>Satisfaction by country</span></button>
+        </div>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="privacy-note"><span class="lock">◇</span><span><strong>Private by design</strong><small>Your dataset stays on this device.</small></span></div>
+        <div class="sidebar-version">LOCAL DATA ASSISTANT <span>·</span> V1.0</div>
+      </div>
+    </aside>
+
+    <section class="main">
+      <header class="topbar">
+        <div class="breadcrumb"><span class="breadcrumb-mark">A</span><span>Workspace</span><span class="breadcrumb-slash">/</span><strong>AI Usage &amp; Impact</strong></div>
+        <div class="topbar-status"><span class="status-dot"></span><span>Running locally</span><span class="topbar-tag" id="mode-tag">RULE-BASED</span></div>
+      </header>
+      <section class="welcome" id="welcome">
+        <div class="welcome-kicker"><span class="spark">✳</span> YOUR RESEARCH, AT A GLANCE</div>
+        <h1>Make sense of<br><span>AI in everyday life.</span></h1>
+        <p class="welcome-copy">Explore how students and professionals use AI. Ask a question and get a clear answer, backed by your survey data.</p>
+        <div class="welcome-meta"><span><i class="meta-dot"></i><b id="record-count">300</b> survey responses</span><span class="meta-divider"></span><span><i class="meta-shield">◇</i> Private &amp; local</span></div>
+        <div class="starter-label">A FEW IDEAS TO GET YOU STARTED</div>
+        <div class="starter-prompts">
+          <button type="button" class="starter-prompt"><span class="starter-icon violet">↗</span><span>What is the average productivity score?</span><span class="prompt-arrow">↗</span></button>
+          <button type="button" class="starter-prompt"><span class="starter-icon mint">◫</span><span>Compare time saved by user type</span><span class="prompt-arrow">↗</span></button>
+          <button type="button" class="starter-prompt"><span class="starter-icon peach">✳</span><span>Which AI tools are most popular?</span><span class="prompt-arrow">↗</span></button>
+          <button type="button" class="starter-prompt"><span class="starter-icon blue">◎</span><span>What is satisfaction by country?</span><span class="prompt-arrow">↗</span></button>
+        </div>
+      </section>
+      <section class="results" id="results" aria-live="polite"></section>
+      <form class="composer" id="query-form">
+        <label class="sr-only" for="question">Ask a question about the dataset</label>
+        <textarea id="question" rows="1" maxlength="500" placeholder="Ask anything about your dataset…" required></textarea>
+        <div class="composer-bottom"><span class="composer-context"><span class="context-icon">✳</span> Answers grounded in your data</span><span class="composer-hint">ENTER TO SEND <kbd>↵</kbd></span></div>
+        <button class="send-button" id="send" type="submit" aria-label="Send question"><span>↑</span></button>
+      </form>
+      <footer><span class="footer-mark">A</span><span>AI Usage Data Agent</span><i></i><span>Results are calculated from the cleaned survey CSV</span></footer>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
