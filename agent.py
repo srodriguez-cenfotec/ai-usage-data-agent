@@ -18,7 +18,7 @@ METRICS = {
     "Monthly_Income": ("Monthly income", ("monthly income", "income", "salario", "ingreso")),
     "AI_Usage_Hours_Per_Day": (
         "AI use (hours/day)",
-        ("ai usage hours", "usage hours", "hours of ai", "ai usage", "usage of ai", "use of ai", "daily ai usage", "horas de uso", "horas usando ia", "uso de ia"),
+        ("ai usage hours", "usage hours", "hours of ai", "ai usage", "usage of ai", "use of ai", "daily ai usage", "usage", "horas de uso", "horas usando ia", "uso de ia"),
     ),
     "Monthly_AI_Cost": ("Monthly AI cost", ("monthly ai cost", "ai cost", "cost", "costo", "gasto")),
     "Productivity_Score": (
@@ -81,6 +81,24 @@ def _category_value(column, value):
         return aliases.get(folded, value.strip())
     if column == "User_Type":
         return {"student": "Student", "professional": "Professional"}.get(folded, value.title())
+    if column == "Education_Level":
+        canonical = {
+            "hs": "High school",
+            "high school": "High school",
+            "undergrad": "Undergraduate",
+            "undergraduate": "Undergraduate",
+            "ba bsc": "Bachelor's",
+            "bachelors": "Bachelor's",
+            "bachelors degree": "Bachelor's",
+            "ma msc": "Master's",
+            "masters": "Master's",
+            "masters degree": "Master's",
+            "ph d": "PhD",
+            "phd": "PhD",
+        }
+        normalized = re.sub(r"[^a-z0-9 ]", " ", folded.replace("'", ""))
+        normalized = " ".join(normalized.split())
+        return canonical.get(normalized, value.strip())
     if column == "Would_Recommend":
         return value.title()
     return value.strip()
@@ -235,17 +253,105 @@ def _llm_plan(question, rows, model):
         column: sorted({row[column] for row in rows if row.get(column)}, key=_fold)
         for column in CATEGORIES
     }
+    folded_question = _fold(question)
+    filter_options = {}
+    for column, values in options.items():
+        matched = []
+        for value in values:
+            aliases = [value]
+            if column == "AI_Tool" and value == "ChatGPT":
+                aliases.append("Chat GPT")
+            if column == "User_Type":
+                aliases += {
+                    "Student": ["student", "students", "estudiante", "estudiantes"],
+                    "Professional": ["professional", "professionals", "profesional", "profesionales"],
+                }.get(value, [])
+            if any(_contains(folded_question, alias) for alias in aliases):
+                matched.append(value)
+        filter_options[column] = ["", *matched]
+
+    explicit_group = None
+    for column, (_, aliases) in CATEGORIES.items():
+        if any(
+            _contains(folded_question, marker + alias)
+            for marker in (
+                "by ", "per ", "por ", "entre ", "across ", "each ", "every ",
+                "based on ", "according to ", "segun ", "segun el nivel de ",
+                "cada ",
+            )
+            for alias in aliases
+        ):
+            explicit_group = column
+            break
+    if explicit_group is None:
+        for column, (_, aliases) in CATEGORIES.items():
+            if any(
+                _contains(folded_question, marker + alias)
+                for marker in ("which ", "what ", "cual ", "que ")
+                for alias in aliases
+            ):
+                explicit_group = column
+                break
+    if explicit_group is None and any(
+        _contains(folded_question, phrase)
+        for phrase in ("most popular", "popular", "most common", "top", "most often", "mas usado", "mas popular")
+    ):
+        explicit_group = "AI_Tool"
+    if explicit_group is None and any(
+        _contains(folded_question, phrase)
+        for phrase in ("compare", "compared", "differ", "difference", "versus", "vs", "between", "compara", "diferencia", "entre")
+    ):
+        explicit_group = next(
+            (column for column in CATEGORIES if len(filter_options[column]) > 2),
+            None,
+        )
+    if explicit_group:
+        filter_options[explicit_group] = [""]
+    group_options = ["", explicit_group] if explicit_group else [""]
+
+    metric, _ = _metric(question)
+    if metric:
+        metric_options = [metric]
+    elif any(
+        _contains(folded_question, phrase)
+        for phrase in ("how many", "number of", "count", "cuantos", "cuantas", "cantidad de")
+    ):
+        metric_options = ["__records__"]
+    else:
+        metric_options = [*METRICS, "__records__"]
+
+    is_popularity_question = (
+        explicit_group == "AI_Tool"
+        and any(
+            _contains(folded_question, phrase)
+            for phrase in ("popular", "most common", "top", "most often", "mas usado", "mas popular")
+        )
+    )
+    if is_popularity_question:
+        metric_options = ["__records__"]
+
+    if metric_options == ["__records__"]:
+        aggregation_options = ["count"]
+    elif any(_contains(folded_question, phrase) for phrase in ("average", "mean", "promedio", "media")):
+        aggregation_options = ["average"]
+    elif any(_contains(folded_question, phrase) for phrase in ("total", "sum", "suma")):
+        aggregation_options = ["sum"]
+    elif any(_contains(folded_question, phrase) for phrase in ("highest", "maximum", "max", "mayor", "maximo", "maxima")):
+        aggregation_options = ["max"]
+    else:
+        aggregation_options = ["average"]
+
     schema = {
         "type": "object",
         "properties": {
-            "metric": {"type": "string", "enum": [*METRICS, "__records__", ""]},
-            "aggregation": {"type": "string", "enum": ["count", "average", "sum", "max"]},
-            "group_by": {"type": "string", "enum": ["", *CATEGORIES]},
+            "metric": {"type": "string", "enum": metric_options},
+            "aggregation": {"type": "string", "enum": aggregation_options},
+            "group_by": {"type": "string", "enum": group_options},
             "filters": {
                 "type": "object",
                 "properties": {
-                    column: {"type": "string", "enum": ["", *values]}
-                    for column, values in options.items()
+                    column: {"type": "string", "enum": filter_options[column]}
+                    for column in CATEGORIES
                 },
                 "required": list(CATEGORIES),
                 "additionalProperties": False,
@@ -259,11 +365,14 @@ def _llm_plan(question, rows, model):
         "Return only the JSON object matching the supplied schema. Never write SQL, code, "
         "or invent data. Use a metric only when it is supported by the question. "
         "Use __records__ for counting respondents; otherwise use one of these numeric "
-        f"column names: {', '.join(METRICS)}. Use an empty metric if the request is unsupported. "
+        f"column names: {', '.join(METRICS)}. "
         "Use count for how many, average for average/typical, sum for total, and max for highest. "
-        "Choose group_by only when the question asks for a comparison or breakdown. "
-        "Set filters only for values explicitly requested; all other filter values must be empty. "
-        "The allowed category values are included in the schema. Do not infer causal relationships. "
+        "Choose group_by when the question asks for a comparison, breakdown, or says "
+        "'by', 'based on', 'according to', 'por', or 'según' a category. "
+        "Set a filter only when the question explicitly mentions that value. "
+        "Every filter not explicitly mentioned must be an empty string. "
+        "Do not fill filters with values just because they are available. "
+        "Do not infer causal relationships. "
         "The question may be in English or Spanish."
     )
     body = {

@@ -14,6 +14,11 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(len(self.rows), 300)
         self.assertIsNone(self.rows[2]["Education_Level"])
         self.assertEqual(self.rows[0]["AI_Usage_Hours_Per_Day"], 2.0)
+        education_levels = {row["Education_Level"] for row in self.rows if row["Education_Level"]}
+        self.assertEqual(
+            education_levels,
+            {"High school", "Undergraduate", "Bachelor's", "Diploma", "Master's", "PhD"},
+        )
 
     def test_average_productivity(self):
         result = answer("What is the average productivity score?", self.rows)
@@ -79,6 +84,56 @@ class AgentTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "outside the dataset"):
             answer("Average productivity in Atlantis", self.rows, "local-test-model")
+
+    @patch("agent.build_opener")
+    def test_model_schema_only_allows_question_relevant_values(self, build_opener):
+        filters = {column: "" for column in CATEGORIES}
+        plan = {
+            "metric": "Productivity_Score",
+            "aggregation": "average",
+            "group_by": "",
+            "filters": filters,
+        }
+        response = Mock()
+        response.read.return_value = json.dumps({
+            "choices": [{"message": {"content": json.dumps(plan)}}],
+        }).encode()
+        build_opener.return_value.open.return_value.__enter__.return_value = response
+
+        answer("What is the average productivity score?", self.rows, "local-test-model")
+
+        request = build_opener.return_value.open.call_args.args[0]
+        schema = json.loads(request.data)["response_format"]["schema"]
+        properties = schema["properties"]
+        self.assertEqual(properties["metric"]["enum"], ["Productivity_Score"])
+        self.assertEqual(properties["group_by"]["enum"], [""])
+        for column in CATEGORIES:
+            self.assertEqual(properties["filters"]["properties"][column]["enum"], [""])
+
+    @patch("agent.build_opener")
+    def test_based_on_education_level_is_a_grouped_usage_query(self, build_opener):
+        filters = {column: "" for column in CATEGORIES}
+        plan = {
+            "metric": "AI_Usage_Hours_Per_Day",
+            "aggregation": "average",
+            "group_by": "Education_Level",
+            "filters": filters,
+        }
+        response = Mock()
+        response.read.return_value = json.dumps({
+            "choices": [{"message": {"content": json.dumps(plan)}}],
+        }).encode()
+        build_opener.return_value.open.return_value.__enter__.return_value = response
+
+        result = answer("Usage based on education level of people", self.rows, "local-test-model")
+
+        self.assertEqual(result["columns"][0], "Education level")
+        self.assertEqual(len(result["rows"]), 6)
+        request = build_opener.return_value.open.call_args.args[0]
+        schema = json.loads(request.data)["response_format"]["schema"]
+        properties = schema["properties"]
+        self.assertEqual(properties["metric"]["enum"], ["AI_Usage_Hours_Per_Day"])
+        self.assertEqual(properties["group_by"]["enum"], ["", "Education_Level"])
 
 
 if __name__ == "__main__":
